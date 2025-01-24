@@ -1,0 +1,15 @@
+keycloak_token_url: "https://auth.wise-loculus.genspectrum.org/realms/loculus/protocol/openid-connect/token"
+keycloak_client_id: "backend-client"
+username: "USER"
+password: "PASSWORD"
+backend_url: "https://api.wise-loculus.genspectrum.org/backend/"
+group_id: 1
+expected_columns:
+- submissionId
+- date
+- location
+- lineageFrequencyEstimates
+- nucleotideMutationFrequency
+- aminoAcidMutationFrequency
+- reference
+- primerProtocol

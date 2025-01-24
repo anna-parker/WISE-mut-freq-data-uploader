@@ -1,0 +1,13 @@
+name: uploader
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  # Core Python dependencies
+  - python =3.12
+  # Extra dependencies
+  - biopython
+  - click
+  - pandas
+  - PyYAML
+  - requests
