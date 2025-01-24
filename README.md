@@ -13,11 +13,11 @@ You then need to add your password and username to the `config.yaml` to submit s
 python scripts/upload_data.py --data-folder {PATH} --config-file config.yaml --organism {ORGANISM}
 ```
 
-This script submits all data in the `data-folder` under the assumption this is all data from the same `organism`, i.e. `influenza` or `rsv`.
+All metadata from the same organism should be kept in the same `data-folder`, `organism`, can take values `influenza` or `rsv`.
 
-This script assumes that all data that you submit in the data-folder is from the same organism and that (date, location, reference) pairs are unique, even if they are split up among files. Please check that this is true before running this script. 
+#### WARNING!! This script assumes that (date, location, reference) pairs are unique, even if they are split up among files - but it doesn't verify this! Please check that this is true before running this script. 
 
-Note that for RSV `submissionId`s were duplicated across files, as all RSV-B sequences and RSV-A sequences were in both files, but each file only had the results of one assay. Thus, the empty duplications, i.e. RSV-B sequences in the RSV-A results file had to be removed before running the script. I did this using the commands: 
+For example, for RSV `submissionId`s were duplicated across files. Each RSV-B and RSV-A sample was in both files, but each file only had mutations to one reference, i.e. only mutations from RSV-B or RSV-A. Thus, the empty duplications, i.e. RSV-B sequences in the RSV-A results file had to be removed before running the script. I did this using the commands: 
 
 ```
 tsv-filter   --header --str-eq  2:RSV-A data/WISE-rsv/timeline_mutation_multiple_batches_EPI_ISL_412866.tsv > timeline_mutation_multiple_batches_EPI_ISL_412866_filtered.tsv
