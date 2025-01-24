@@ -1,4 +1,20 @@
-### WISE mutation frequency data uploader
+# WISE mutation frequency data uploader
+
+This script helps upload metadata to https://wise-loculus.genspectrum.org/ for use in https://genspectrum.org/swiss-wastewater/rsv and https://genspectrum.org/swiss-wastewater/influenza.
+
+It assumes metadata is a tsv format, with the columns:
+- `submissionId`: string
+- `reference`: string
+- `primerProtocol`: string
+- `date`: string, format YYYY-MM-DD
+- `location`: string
+- `nucleotideMutationFrequency`: string, json object with format `"{""A10052G"": null, ""T9956C"": 0.0}"`
+- `aminoAcidMutationFrequency`: string, json object with format `"{""A10052G"": null, ""T9956C"": 0.0}"`
+- `lineageFrequencyEstimates`: string, json object with format `"{""lineage"": null, ""lineage"": ""xx""}"`
+
+SubmissionId should be unique for each sample (reference, date, location pair). 
+
+## Installation
 
 Run this script by first installing and activating [micromamba](https://mamba.readthedocs.io/en/latest/installation/micromamba-installation.html):
 
