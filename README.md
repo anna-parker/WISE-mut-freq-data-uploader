@@ -5,10 +5,10 @@ Run this script by first installing and activating micromamba:
 ```
 micromamba create -f environment.yaml
 micromamba activate uploader
-python scripts/upload_data.py --data-folder data/WISE --config-file config.yaml
+python scripts/upload_data.py --data-folder data/WISE --config-file config.yaml --organism ORGANISM
 ```
 
-This script will submit all data in the data-folder under the assumption this is all data from the same organism, i.e. `influenza` or `rsv` (the organism can be changed in the config file).
+This script will submit all data in the data-folder under the assumption this is all data from the same organism, i.e. `influenza` or `rsv` (the organism is set using ORGANISM).
 
 
 Commandline to filter the tsvs (as only one has all RSV-B and the other RSV-A data)

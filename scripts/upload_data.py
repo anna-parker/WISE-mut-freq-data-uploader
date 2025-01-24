@@ -135,12 +135,17 @@ def approve(config: Config):
 
     return response.json()
 
+
 def assert_string_format(s):
     # Define the regular expression for the desired format
-    pattern = r'^[A-Za-z]\d+[A-Za-z\*]$'
+    pattern = r"^[A-Za-z]\d+[A-Za-z\*]$"
     # Assert the string matches the pattern
     if not re.match(pattern, s):
-        logger.info(f"String '{s}' does not match the required format 'letter:numbers:letter'")
+        logger.info(
+            f"String '{s}' does not match the required format 'letter:numbers:letter'"
+        )
+        return False
+    return True
 
 
 def generate_dummy_fasta(config, metadata, sequence_file):
@@ -149,21 +154,45 @@ def generate_dummy_fasta(config, metadata, sequence_file):
         raise ValueError(
             f"Columns in metadata file {metadata} do not match expected columns"
         )
-    for index, row in df.iterrows():
-        print(row["submissionId"])  # Access submissionId column
-        if pd.notna(row["aminoAcidMutationFrequency"]):
-            print(row["aminoAcidMutationFrequency"])
-            amino_acid_mutation_frequency = json.loads(row["aminoAcidMutationFrequency"])
-            for key in amino_acid_mutation_frequency.keys():
-                assert_string_format(key)
     with open(sequence_file, "w") as f:
         for index, row in df.iterrows():
             fasta_record = f">{row['submissionId']}\nNNN\n"
             f.write(fasta_record)
 
+
 def generate_deduplicated_metadata(metadata, output_metadata):
+    """
+    Make sure that the mutation frequency keys are in the correct format
+    Remove insertions and deletions from the metadata"""
     df = pd.read_csv(metadata, sep="\t")
-    df['submissionId'] = df['submissionId'].astype(str) + df['reference'].astype(str)
+    df["submissionId"] = df["submissionId"].astype(str) + df["reference"].astype(str)
+    for index, row in df.iterrows():
+        if pd.notna(row["aminoAcidMutationFrequency"]):
+            amino_acid_mutation_frequency = json.loads(
+                row["aminoAcidMutationFrequency"]
+            )
+            amino_acid_mutation_frequency_copy = amino_acid_mutation_frequency.copy()
+            for key in amino_acid_mutation_frequency.keys():
+                if not assert_string_format(key):
+                    logger.info(
+                        f"{row['submissionId']} has an amino acid mutation frequency key that does not match the required format"
+                    )
+                    amino_acid_mutation_frequency.pop(key)
+            df.at[index, "aminoAcidMutationFrequency"] = json.dumps(
+                amino_acid_mutation_frequency_copy
+            )
+        if pd.notna(row["nucleotideMutationFrequency"]):
+            nuc_mutation_frequency = json.loads(row["nucleotideMutationFrequency"])
+            nuc_mutation_frequency_copy = nuc_mutation_frequency.copy()
+            for key in nuc_mutation_frequency.keys():
+                if not assert_string_format(key):
+                    logger.info(
+                        f"{row['submissionId']} has an nuc mutation frequency key that does not match the required format"
+                    )
+                    nuc_mutation_frequency_copy.pop(key)
+            df.at[index, "nucleotideMutationFrequency"] = json.dumps(
+                nuc_mutation_frequency_copy
+            )
     df.to_csv(output_metadata, sep="\t", index=False)
 
 
@@ -190,17 +219,19 @@ def main(data_folder: str, config_file: str, log_level: str, organism: str) -> N
     logger.info(f"Config: {config}")
 
     for file in os.listdir(data_folder):
-        if file.endswith(".tsv"):
+        if file.endswith(".tsv") and not file.endswith("_deduplicated.tsv"):
             metadata_file = os.path.join(data_folder, file)
             sequence_file = metadata_file.replace(".tsv", ".fasta")
-            deduplicated_metadata_file = metadata_file.replace(".tsv", "_deduplicated.tsv")
+            deduplicated_metadata_file = metadata_file.replace(
+                ".tsv", "_deduplicated.tsv"
+            )
             generate_deduplicated_metadata(metadata_file, deduplicated_metadata_file)
             generate_dummy_fasta(config, deduplicated_metadata_file, sequence_file)
             submit(deduplicated_metadata_file, sequence_file, config, config.group_id)
     logger.info("Submitted all data. Waiting for 3 minutes before approving.")
-    # sleep(3*60)
-    # approve(config)
-    # logger.info("Approved all sequences")
+    sleep(3 * 60)
+    approve(config)
+    logger.info("Approved all sequences")
 
 
 if __name__ == "__main__":
