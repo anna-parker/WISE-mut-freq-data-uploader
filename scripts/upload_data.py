@@ -149,6 +149,9 @@ def assert_string_format(s):
 
 
 def generate_dummy_fasta(config, metadata, sequence_file):
+    """
+    Generate a dummy fasta file with NNN as the sequence for each submissionId
+    """
     df = pd.read_csv(metadata, sep="\t")
     if set(df.columns) != set(config.expected_columns):
         raise ValueError(
@@ -163,7 +166,9 @@ def generate_dummy_fasta(config, metadata, sequence_file):
 def generate_deduplicated_metadata(metadata, output_metadata):
     """
     Make sure that the mutation frequency keys are in the correct format
-    Remove insertions and deletions from the metadata"""
+    Remove insertions and deletions from the metadata
+    """
+
     df = pd.read_csv(metadata, sep="\t")
     df["submissionId"] = df["submissionId"].astype(str) + df["reference"].astype(str)
     for index, row in df.iterrows():

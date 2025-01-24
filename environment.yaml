@@ -11,3 +11,4 @@ dependencies:
   - pandas
   - PyYAML
   - requests
+  - tsv-utils
