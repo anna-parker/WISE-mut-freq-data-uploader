@@ -108,17 +108,30 @@ def make_request(
     return response
 
 
-def submit(metadata, sequences, config: Config, group_id):
+def submit(metadata, config: Config, group_id):
     url = f"{organism_url(config)}/submit"
 
     params = {"groupId": group_id, "dataUseTermsType": "OPEN"}
     files = {
         "metadataFile": (metadata, open(metadata, "rb")),
-        "sequenceFile": (sequences, open(sequences, "rb")),
     }
 
     response = make_request(url, config, params=params, files=files)
     logger.debug(f"Submission response: {response.json()}")
+
+    return response.json()
+
+
+def revise(metadata, config: Config, group_id):
+    url = f"{organism_url(config)}/revise"
+
+    params = {"groupId": group_id, "dataUseTermsType": "OPEN"}
+    files = {
+        "metadataFile": (metadata, open(metadata, "rb")),
+    }
+
+    response = make_request(url, config, params=params, files=files)
+    logger.debug(f"Revision response: {response.json()}")
 
     return response.json()
 
@@ -136,6 +149,24 @@ def approve(config: Config):
     return response.json()
 
 
+def fetch_released_entries(config: Config) -> dict[str, Any]:
+    """Get sequences that are ready for release"""
+
+    url = f"{organism_url(config)}/get-released-data"
+
+    headers = {"Content-Type": "application/json"}
+
+    existing_entries = {}
+
+    with requests.get(url, headers=headers, timeout=3600, stream=True) as response:
+        response.raise_for_status()
+        for line in response.iter_lines():
+            full_json = json.loads(line)
+            filtered_json = full_json["metadata"]
+            existing_entries[full_json["metadata"]["submissionId"]] = filtered_json
+    return existing_entries
+
+
 def assert_string_format(s):
     # Define the regular expression for the desired format
     pattern = r"^[A-Za-z]\d+[A-Za-z\*]$"
@@ -148,28 +179,11 @@ def assert_string_format(s):
     return True
 
 
-def generate_dummy_fasta(config, metadata, sequence_file):
-    """
-    Generate a dummy fasta file with NNN as the sequence for each submissionId
-    """
-    df = pd.read_csv(metadata, sep="\t")
-    if set(df.columns) != set(config.expected_columns):
-        raise ValueError(
-            f"Columns in metadata file {metadata} do not match expected columns"
-        )
-    with open(sequence_file, "w") as f:
-        for index, row in df.iterrows():
-            fasta_record = f">{row['submissionId']}\nNNN\n"
-            f.write(fasta_record)
-
-
-def generate_deduplicated_metadata(metadata, output_metadata):
+def format_df_entries(df: pd.DataFrame):
     """
     Make sure that the mutation frequency keys are in the correct format
     Remove insertions and deletions from the metadata
     """
-
-    df = pd.read_csv(metadata, sep="\t")
     df["submissionId"] = df["submissionId"].astype(str) + df["reference"].astype(str)
     for index, row in df.iterrows():
         if pd.notna(row["aminoAcidMutationFrequency"]):
@@ -198,7 +212,28 @@ def generate_deduplicated_metadata(metadata, output_metadata):
             df.at[index, "nucleotideMutationFrequency"] = json.dumps(
                 nuc_mutation_frequency_copy
             )
-    df.to_csv(output_metadata, sep="\t", index=False)
+    return df
+
+
+def prepare_metadata(config: Config, metadata, submit_metadata, revise_metadata):
+    """
+    Format data entries
+
+    Split remaining entries into
+        1. New entries to submit
+        2. Entries that need to be revised (as they already exist in the database)
+    """
+
+    df = pd.read_csv(metadata, sep="\t")
+    formatted_df = format_df_entries(df)
+    released_entries: dict[str, dict] = fetch_released_entries(config)
+    to_submit = formatted_df[
+        ~formatted_df["submissionId"].isin(released_entries.keys())
+    ]
+    to_submit.to_csv(submit_metadata, sep="\t", index=False)
+    to_revise = formatted_df[formatted_df["submissionId"].isin(released_entries.keys())]
+    to_revise["accession"] = to_revise["submissionId"].apply(lambda row: released_entries.get(row).get("accession"))
+    to_revise.to_csv(revise_metadata, sep="\t", index=False)
 
 
 @click.command()
@@ -224,15 +259,19 @@ def main(data_folder: str, config_file: str, log_level: str, organism: str) -> N
     logger.info(f"Config: {config}")
 
     for file in os.listdir(data_folder):
-        if file.endswith(".tsv") and not file.endswith("_deduplicated.tsv"):
+        if (
+            file.endswith(".tsv")
+            and not file.endswith("_submit.tsv")
+            and not file.endswith("_revise.tsv")
+        ):
             metadata_file = os.path.join(data_folder, file)
-            sequence_file = metadata_file.replace(".tsv", ".fasta")
-            deduplicated_metadata_file = metadata_file.replace(
-                ".tsv", "_deduplicated.tsv"
+            submit_metadata_file = metadata_file.replace(".tsv", "_submit.tsv")
+            revise_metadata_file = metadata_file.replace(".tsv", "_revise.tsv")
+            prepare_metadata(
+                config, metadata_file, submit_metadata_file, revise_metadata_file
             )
-            generate_deduplicated_metadata(metadata_file, deduplicated_metadata_file)
-            generate_dummy_fasta(config, deduplicated_metadata_file, sequence_file)
-            submit(deduplicated_metadata_file, sequence_file, config, config.group_id)
+            submit(submit_metadata_file, config, config.group_id)
+            revise(revise_metadata_file, config, config.group_id)
     logger.info("Submitted all data. Waiting for 3 minutes before approving.")
     sleep(3 * 60)
     approve(config)
