@@ -178,6 +178,17 @@ def assert_string_format(s):
         return False
     return True
 
+def assert_aa_format(s):
+    # Define the regular expression for the desired format
+    pattern = r"^[A-Za-z]:?[A-Za-z]\d+[A-Za-z\*]$"
+    # Assert the string matches the pattern
+    if not re.match(pattern, s):
+        logger.info(
+            f"String '{s}' does not match the required format 'letter:numbers:letter'"
+        )
+        return False
+    return True
+
 
 def format_df_entries(df: pd.DataFrame):
     """
@@ -192,11 +203,11 @@ def format_df_entries(df: pd.DataFrame):
             )
             amino_acid_mutation_frequency_copy = amino_acid_mutation_frequency.copy()
             for key in amino_acid_mutation_frequency.keys():
-                if not assert_string_format(key):
+                if not assert_aa_format(key):
                     logger.info(
                         f"{row['submissionId']} has an amino acid mutation frequency key that does not match the required format"
                     )
-                    amino_acid_mutation_frequency.pop(key)
+                    amino_acid_mutation_frequency_copy.pop(key)
             df.at[index, "aminoAcidMutationFrequency"] = json.dumps(
                 amino_acid_mutation_frequency_copy
             )
@@ -225,6 +236,12 @@ def prepare_metadata(config: Config, metadata, submit_metadata, revise_metadata)
     """
 
     df = pd.read_csv(metadata, sep="\t")
+    df = df.rename(
+        columns={
+            "aminoAcidMutationFrequencies": "aminoAcidMutationFrequency",
+            "nucleotideMutationFrequencies": "nucleotideMutationFrequency",
+        }
+    )
     formatted_df = format_df_entries(df)
     released_entries: dict[str, dict] = fetch_released_entries(config)
     to_submit = formatted_df[
@@ -232,7 +249,9 @@ def prepare_metadata(config: Config, metadata, submit_metadata, revise_metadata)
     ]
     to_submit.to_csv(submit_metadata, sep="\t", index=False)
     to_revise = formatted_df[formatted_df["submissionId"].isin(released_entries.keys())]
-    to_revise["accession"] = to_revise["submissionId"].apply(lambda row: released_entries.get(row).get("accession"))
+    to_revise["accession"] = to_revise["submissionId"].apply(
+        lambda row: released_entries.get(row).get("accession")
+    )
     to_revise.to_csv(revise_metadata, sep="\t", index=False)
 
 
