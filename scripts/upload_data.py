@@ -180,17 +180,14 @@ def assert_string_format(s):
 
 def assert_aa_format(s):
     # Define the regular expression for the desired format
-    pattern = r"^[A-Za-z]:?[A-Za-z]\d+[A-Za-z\*]$"
+    pattern = r"^[A-Za-z0-9\-]+:?[A-Za-z]\d+[A-Za-z\*]$"
     # Assert the string matches the pattern
     if not re.match(pattern, s):
-        logger.info(
-            f"String '{s}' does not match the required format 'letter:numbers:letter'"
-        )
         return False
     return True
 
 
-def format_df_entries(df: pd.DataFrame):
+def format_df_entries(df: pd.DataFrame, organism: str) -> pd.DataFrame:
     """
     Make sure that the mutation frequency keys are in the correct format
     Remove insertions and deletions from the metadata
@@ -203,11 +200,26 @@ def format_df_entries(df: pd.DataFrame):
             )
             amino_acid_mutation_frequency_copy = amino_acid_mutation_frequency.copy()
             for key in amino_acid_mutation_frequency.keys():
-                if not assert_aa_format(key):
+                if organism=='influenza' and not assert_string_format(key):
+                    # Influenza does not include gene name in aa mutations
                     logger.info(
                         f"{row['submissionId']} has an amino acid mutation frequency key that does not match the required format"
                     )
                     amino_acid_mutation_frequency_copy.pop(key)
+                if organism=='rsv' and not assert_aa_format(key):
+                    # RSV includes gene name in aa mutations
+                    # it might also include a dash to specific if a mutation in an aa
+                    # was caused by different nuc mutations - this needs to be removed
+                    logging.info(f"attempting to fix key: {key}")
+                    key_trimmed = key.split("_")[0]
+                    value = amino_acid_mutation_frequency[key]
+                    amino_acid_mutation_frequency_copy[key_trimmed] = value
+                    amino_acid_mutation_frequency_copy.pop(key)
+                    if not assert_aa_format(key_trimmed):
+                        logger.info(
+                            f"{row['submissionId']} has an amino acid mutation frequency key that does not match the required format"
+                        )
+                        amino_acid_mutation_frequency_copy.pop(key_trimmed)
             df.at[index, "aminoAcidMutationFrequency"] = json.dumps(
                 amino_acid_mutation_frequency_copy
             )
@@ -242,7 +254,7 @@ def prepare_metadata(config: Config, metadata, submit_metadata, revise_metadata)
             "nucleotideMutationFrequencies": "nucleotideMutationFrequency",
         }
     )
-    formatted_df = format_df_entries(df)
+    formatted_df = format_df_entries(df, config.organism)
     released_entries: dict[str, dict] = fetch_released_entries(config)
     to_submit = formatted_df[
         ~formatted_df["submissionId"].isin(released_entries.keys())
